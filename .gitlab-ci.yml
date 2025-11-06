@@ -1,0 +1,18 @@
+pages:
+  # The stage name must be 'deploy' for GitLab Pages
+  stage: deploy
+  script:
+    # 1. Create a temporary directory.
+    - mkdir .public
+    # 2. Copy the main application file (nine_ball_scorer.html)
+    #    and rename it to index.html within the temporary folder.
+    - cp nine_ball_scorer.html .public/index.html
+    # 3. Rename the temporary directory to 'public' (required by GitLab Pages).
+    - mv .public public
+  artifacts:
+    # The 'public' directory is what GitLab Pages serves.
+    paths:
+      - public
+  # Only deploy when changes are pushed to the main branch
+  only:
+    - main
