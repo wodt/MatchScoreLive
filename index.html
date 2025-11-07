@@ -15,7 +15,6 @@
         setLogLevel('Debug');
         
         // --- 1. FIREBASE CONFIGURATION (MANDATORY) ---
-        // Your specific configuration is hardcoded here for guaranteed deployment success on GitHub Pages.
         const firebaseConfig = {
             apiKey: "AIzaSyDecFpmgdHZfYA562wuksV-03VCxOw6PdI",
             authDomain: "matchscorelive-6bfe9.firebaseapp.com",
@@ -26,7 +25,6 @@
             measurementId: "G-YBNQRZ4NJM"
         };
         
-        // Since we are not in the Canvas environment, we must define these manually.
         const appId = 'matchscorelive-6bfe9'; 
 
         let db, auth, userId = null;
@@ -38,10 +36,12 @@
             players: { A: 'Player A', B: 'Player B' },
             scores: { A: 0, B: 0 },
             raceTo: 7,
-            status: 'Setup' // 'Setup', 'Active', 'Finished'
+            tableNum: '1', // Default table number
+            status: 'Setup' 
         };
 
         const elements = {};
+        let isAdminMode = false;
 
         function getElements() {
             elements.matchSetup = document.getElementById('match-setup');
@@ -54,6 +54,9 @@
             elements.inputNameA = document.getElementById('input-name-a');
             elements.inputNameB = document.getElementById('input-name-b');
             elements.inputRaceTo = document.getElementById('input-race-to');
+            elements.inputTableNum = document.getElementById('input-table-num'); // New element
+            elements.tableDisplay = document.getElementById('table-display');     // New element
+            elements.tableSetupGroup = document.getElementById('table-setup-group'); // New element
             elements.errorMessage = document.getElementById('error-message');
             elements.modal = document.getElementById('winner-modal');
             elements.modalText = document.getElementById('winner-modal-text');
@@ -70,13 +73,11 @@
                 db = getFirestore(app);
                 auth = getAuth(app);
 
-                // Sign in anonymously, as the custom token is unavailable on static hosting
                 const userCredential = await signInAnonymously(auth);
                 userId = userCredential.user.uid;
                 console.log("Authenticated anonymously with UID:", userId);
                 
                 isAuthReady = true; 
-                // Start listening to data once auth is ready
                 if (matchState.docId) {
                     startRealtimeListener(matchState.docId);
                 }
@@ -84,19 +85,17 @@
             } catch (error) {
                 console.error("Firebase Initialization or Authentication Failed:", error);
                 displayError(`Error: Cannot connect to Firebase database. Check console for details.`);
-                isAuthReady = true; // Mark as ready to avoid endless loading
+                isAuthReady = true; 
             }
         }
 
         // --- 3. DATA AND UI LOGIC ---
 
         function getMatchDocRef(matchId) {
-            // Public data path: /artifacts/{appId}/public/data/matches/{matchId}
             return doc(db, 'artifacts', appId, 'public', 'data', 'matches', matchId);
         }
 
         function getLogCollectionRef(matchId) {
-            // Log path: /artifacts/{appId}/public/data/matches/{matchId}/log
             return collection(db, 'artifacts', appId, 'public', 'data', 'matches', matchId, 'log');
         }
 
@@ -113,25 +112,23 @@
                 elements.logToggleBtn.classList.add('hidden');
                 displayError('');
                 elements.matchIdDisplay.textContent = 'Match ID: None';
+                elements.tableDisplay.textContent = 'Table #N/A';
                 return;
             }
 
-            // Hide setup and show scorer
             elements.matchSetup.classList.add('hidden');
             elements.scorer.classList.remove('hidden');
             elements.logToggleBtn.classList.remove('hidden');
             
-            // Update matchState
             Object.assign(matchState, data);
 
-            // Update UI elements
             elements.nameA.textContent = data.players.A;
             elements.nameB.textContent = data.players.B;
             elements.scoreA.textContent = data.scores.A;
             elements.scoreB.textContent = data.scores.B;
             elements.matchIdDisplay.textContent = `Match ID: ${matchState.docId}`;
+            elements.tableDisplay.textContent = `Table #${data.tableNum || '1'}`; // Display table num
             
-            // Check for game end
             if (data.status === 'Finished') {
                 const winner = data.scores.A > data.scores.B ? data.players.A : data.players.B;
                 elements.modalText.textContent = `${winner} wins the race to ${data.raceTo}!`;
@@ -144,15 +141,12 @@
         function toggleLog() {
             const container = elements.matchLogContainer;
             
-            // 1. Toggle the hidden class for visibility (display: none)
             const isNowHidden = container.classList.toggle('hidden');
             
-            // 2. Crucial fix: Toggle the flex display properties
             if (isNowHidden) {
                 container.classList.remove('flex', 'flex-col');
                 elements.logToggleBtn.textContent = 'Show Match Log';
             } else {
-                // Show the log and set it to display as a column
                 container.classList.add('flex', 'flex-col');
                 elements.logToggleBtn.textContent = 'Hide Match Log';
             }
@@ -163,7 +157,6 @@
 
             const matchRef = getMatchDocRef(matchId);
             
-            // 1. Listen to the main match document
             const unsubscribeMatch = onSnapshot(matchRef, (docSnap) => {
                 if (docSnap.exists()) {
                     renderMatch(docSnap.data());
@@ -176,7 +169,6 @@
                 displayError("Error connecting to database (Check security rules/network).");
             });
 
-            // 2. Listen to the log
             const logQ = query(getLogCollectionRef(matchId), orderBy('timestamp', 'desc'), limit(15));
             const unsubscribeLog = onSnapshot(logQ, (querySnapshot) => {
                 let logHtml = '';
@@ -206,15 +198,15 @@
             const nameA = elements.inputNameA.value.trim() || 'Player 1';
             const nameB = elements.inputNameB.value.trim() || 'Player 2';
             const raceTo = parseInt(elements.inputRaceTo.value, 10);
+            const tableNum = elements.inputTableNum.value.trim() || '1'; // Read table number
             
             if (isNaN(raceTo) || raceTo < 1) {
                 displayError("Race To score must be a number greater than 0.");
                 return;
             }
 
-            displayError(''); // Clear error message
+            displayError(''); 
             
-            // Generate a simple match ID. 
             const matchId = `match_${crypto.randomUUID().substring(0, 8)}`; 
             const matchRef = getMatchDocRef(matchId);
             
@@ -222,6 +214,7 @@
                 players: { A: nameA, B: nameB },
                 scores: { A: 0, B: 0 },
                 raceTo: raceTo,
+                tableNum: tableNum, // Save table number
                 status: 'Active',
                 createdAt: serverTimestamp(),
                 createdBy: userId,
@@ -229,9 +222,8 @@
 
             try {
                 await setDoc(matchRef, initialData);
-                matchState.docId = matchId; // Set the active document ID
+                matchState.docId = matchId; 
                 
-                // Update URL for sharing
                 const newUrl = new URL(window.location.href);
                 newUrl.searchParams.set('matchId', matchId);
                 window.history.pushState({path: newUrl.href}, '', newUrl.href);
@@ -244,7 +236,6 @@
         });
 
         document.getElementById('reset-match-btn').addEventListener('click', async () => {
-             // Clear the matchId from URL and reload to go back to setup
              const newUrl = new URL(window.location.href);
              newUrl.searchParams.delete('matchId');
              window.location.href = newUrl.href; 
@@ -277,25 +268,21 @@
                         newScore = Math.max(0, currentScore - 1);
                         logMessage = `UNDO: Score for ${playerName} reduced. New score: ${newScore}.`;
                     } else {
-                        return; // Invalid type
+                        return; 
                     }
 
-                    // Determine the new status based on score change
                     if (type === 'win' && newScore >= currentData.raceTo) {
                          newStatus = 'Finished';
                     } else if (currentData.status === 'Finished' && type === 'undo' && newScore < currentData.raceTo) {
-                         // Undoing a winning score reverts game state
                          newStatus = 'Active';
                     }
 
-                    // Update the match document
                     const newScores = { ...currentData.scores, [playerKey]: newScore };
                     transaction.update(matchRef, {
                         scores: newScores,
                         status: newStatus,
                     });
 
-                    // Add log entry
                     transaction.set(doc(logCollection), {
                         message: logMessage,
                         type: type,
@@ -313,9 +300,18 @@
 
         window.onload = function() {
             getElements();
+            
+            // Check for admin flag and show table input if present
+            const params = new URLSearchParams(window.location.search);
+            isAdminMode = params.get('admin') === 'true';
+            
+            if (isAdminMode) {
+                elements.tableSetupGroup.classList.remove('hidden');
+                console.log("Admin Mode Enabled: Table Number input is visible.");
+            }
+
             initFirebase();
             
-            // Attach event listeners
             document.getElementById('start-match-btn').addEventListener('click', () => updateScore('A', 'win'));
             document.getElementById('win-a-btn').addEventListener('click', () => updateScore('A', 'win'));
             document.getElementById('undo-a-btn').addEventListener('click', () => updateScore('A', 'undo'));
@@ -323,12 +319,9 @@
             document.getElementById('undo-b-btn').addEventListener('click', () => updateScore('B', 'undo'));
             document.getElementById('log-toggle-btn').addEventListener('click', toggleLog);
             
-             // Check URL for existing match ID (for sharing/rejoining)
-            const params = new URLSearchParams(window.location.search);
             const urlMatchId = params.get('matchId');
             if (urlMatchId) {
                 matchState.docId = urlMatchId;
-                // Listener will start once auth is ready
             } else {
                  renderMatch({ status: 'Setup' });
             }
@@ -354,6 +347,7 @@
         <!-- Controls Bar -->
         <div class="flex justify-between items-center mt-4 px-4 sm:px-0">
             <p class="text-sm text-gray-500" id="match-id-display">Match ID: None</p>
+            <p class="text-sm text-gray-500 font-semibold" id="table-display">Table #N/A</p>
             <button id="log-toggle-btn" class="hidden px-3 py-1 bg-gray-700 hover:bg-gray-600 text-sm text-gray-300 rounded-lg transition duration-200">
                 Show Match Log
             </button>
@@ -374,7 +368,9 @@
     <!-- Match Setup Screen -->
     <div id="match-setup" class="w-full max-w-md bg-gray-800 p-6 rounded-xl custom-shadow">
         <h2 class="text-xl font-semibold mb-4 text-gray-300">Setup Match</h2>
-        <div class="grid grid-cols-3 gap-3 mb-6">
+        
+        <!-- Player & Race To Inputs -->
+        <div class="grid grid-cols-3 gap-3 mb-3">
             <input type="text" id="input-name-a" placeholder="Player 1 Name" value="Player 1"
                    class="col-span-1 p-3 rounded-lg bg-gray-700 text-gray-100 placeholder-gray-400 focus:ring-blue-500 focus:border-blue-500 border-none">
             <input type="text" id="input-name-b" placeholder="Player 2 Name" value="Player 2"
@@ -382,6 +378,14 @@
             <input type="number" id="input-race-to" placeholder="Race To" value="7"
                    class="col-span-1 p-3 rounded-lg bg-gray-700 text-gray-100 placeholder-gray-400 focus:ring-blue-500 focus:border-blue-500 border-none">
         </div>
+        
+        <!-- Admin-Configured Table Number Input (Hidden by default) -->
+        <div id="table-setup-group" class="mb-6 hidden">
+             <input type="text" id="input-table-num" placeholder="Table #" value="1"
+                   class="w-full p-3 rounded-lg bg-gray-700 text-gray-100 placeholder-gray-400 focus:ring-blue-500 focus:border-blue-500 border-none">
+             <p class="text-xs text-gray-400 mt-1">Table # is configurable only in Admin Mode.</p>
+        </div>
+
         <button id="start-match-btn"
                 class="w-full p-4 bg-blue-500 hover:bg-blue-600 text-white font-bold text-lg rounded-xl shadow-lg transition duration-200 custom-shadow">
             Start Match
