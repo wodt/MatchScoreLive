@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Pool Matches</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Set log level to debug for console visibility
+        setLogLevel('Debug');
+
+        // --- 1. FIREBASE CONFIGURATION (MANDATORY) ---
+        // Using your hardcoded credentials for guaranteed GitHub Pages deployment.
+        const firebaseConfig = {
+            apiKey: "AIzaSyDecFpmgdHZfYA562wuksV-03VCxOw6PdI",
+            authDomain: "matchscorelive-6bfe9.firebaseapp.com",
+            projectId: "matchscorelive-6bfe9",
+            storageBucket: "matchscorelive-6bfe9.firebasestorage.app",
+            messagingSenderId: "870565113347",
+            appId: "1:870565113347:web:85ca2f2a5b73023b89e836",
+            measurementId: "G-YBNQRZ4NJM"
+        };
+        
+        const appId = 'matchscorelive-6bfe9'; 
+
+        let db, auth, isAuthReady = false;
+
+        function getMatchCollectionRef() {
+            // Path: /artifacts/{appId}/public/data/matches/
+            return collection(db, 'artifacts', appId, 'public', 'data', 'matches');
+        }
+
+        function displayError(message) {
+            const errorEl = document.getElementById('error-message');
+            errorEl.textContent = message;
+            errorEl.classList.remove('hidden');
+        }
+
+        // --- 2. FIREBASE INITIALIZATION AND AUTHENTICATION ---
+
+        async function initFirebase() {
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                // Sign in anonymously, required to pass security rules
+                await signInAnonymously(auth);
+                console.log("Authenticated anonymously for Match Viewer.");
+                
+                isAuthReady = true; 
+                loadLiveMatches();
+
+            } catch (error) {
+                console.error("Firebase Initialization or Authentication Failed:", error);
+                displayError(`Error: Cannot connect to Firebase database. Check console for details and security rules.`);
+                isAuthReady = true; 
+            }
+        }
+
+        // --- 3. LIVE DATA LOGIC ---
+
+        function renderMatches(matches) {
+            const container = document.getElementById('match-list-container');
+            let html = '';
+
+            if (matches.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center p-8 bg-gray-700 rounded-xl">
+                        <p class="text-xl text-gray-400 font-semibold">No Active Matches Found</p>
+                        <p class="text-sm text-gray-500 mt-2">Start a new match in the Scorer App (index.html) to see it here.</p>
+                    </div>`;
+                return;
+            }
+
+            matches.forEach(match => {
+                const scoreA = match.scores.A;
+                const scoreB = match.scores.B;
+                const playerNameA = match.players.A;
+                const playerNameB = match.players.B;
+
+                // Link back to the main scorer app, passing the matchId in the URL
+                const linkUrl = `index.html?matchId=${match.id}`;
+
+                html += `
+                    <a href="${linkUrl}" class="match-card bg-gray-800 p-6 rounded-xl custom-shadow hover:bg-gray-700 transition duration-200 block border-l-4 border-blue-500">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-xl font-bold text-gray-200">Race To ${match.raceTo}</h3>
+                            <span class="text-sm text-gray-400">${match.id}</span>
+                        </div>
+                        <div class="flex justify-between items-center text-center">
+                            
+                            <!-- Player A Score -->
+                            <div class="w-1/3">
+                                <p class="text-lg font-semibold text-blue-300 truncate" title="${playerNameA}">${playerNameA}</p>
+                                <p class="text-5xl font-black text-white">${scoreA}</p>
+                            </div>
+                            
+                            <!-- Separator -->
+                            <div class="w-1/6 text-4xl font-light text-gray-500">-</div>
+                            
+                            <!-- Player B Score -->
+                            <div class="w-1/3">
+                                <p class="text-lg font-semibold text-blue-300 truncate" title="${playerNameB}">${playerNameB}</p>
+                                <p class="text-5xl font-black text-white">${scoreB}</p>
+                            </div>
+                        </div>
+                    </a>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        function loadLiveMatches() {
+            if (!db || !isAuthReady) return;
+
+            const matchesRef = getMatchCollectionRef();
+            
+            // Query for all documents where the status is 'Active'
+            const q = query(matchesRef, where("status", "==", "Active"));
+
+            onSnapshot(q, (querySnapshot) => {
+                const liveMatches = [];
+                querySnapshot.forEach((doc) => {
+                    liveMatches.push({
+                        id: doc.id,
+                        ...doc.data()
+                    });
+                });
+                renderMatches(liveMatches);
+            }, (error) => {
+                console.error("Error listening to live matches:", error);
+                displayError("Error fetching live matches. Check database connection/rules.");
+            });
+        }
+
+        // --- 4. INITIALIZATION CALL ---
+
+        window.onload = function() {
+            initFirebase();
+        };
+
+    </script>
+    <style>
+        .custom-shadow {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen font-sans flex flex-col items-center p-4">
+
+    <!-- Header & Title -->
+    <div class="w-full max-w-4xl text-center mb-8">
+        <h1 class="text-4xl font-extrabold text-blue-400 text-shadow">Live Pool Matches</h1>
+        <p class="text-gray-400 mt-2">Click on any match below to open the Scorer app and join/view the game.</p>
+        <p id="error-message" class="text-red-500 font-semibold mt-4 hidden"></p>
+    </div>
+
+    <!-- Live Match List Container -->
+    <div id="match-list-container" class="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <!-- Match cards will be dynamically inserted here -->
+        <div class="col-span-full text-center py-10 text-gray-500">
+            <p>Loading live match data...</p>
+        </div>
+    </div>
+
+</body>
+</html>
