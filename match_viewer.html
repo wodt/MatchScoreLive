@@ -15,7 +15,6 @@
         setLogLevel('Debug');
 
         // --- 1. FIREBASE CONFIGURATION (MANDATORY) ---
-        // Using your hardcoded credentials for guaranteed GitHub Pages deployment.
         const firebaseConfig = {
             apiKey: "AIzaSyDecFpmgdHZfYA562wuksV-03VCxOw6PdI",
             authDomain: "matchscorelive-6bfe9.firebaseapp.com",
@@ -83,6 +82,7 @@
                 const scoreB = match.scores.B;
                 const playerNameA = match.players.A;
                 const playerNameB = match.players.B;
+                const tableNum = match.tableNum || 'N/A'; // Get table number
 
                 // Link back to the main scorer app, passing the matchId in the URL
                 const linkUrl = `index.html?matchId=${match.id}`;
@@ -90,8 +90,8 @@
                 html += `
                     <a href="${linkUrl}" class="match-card bg-gray-800 p-6 rounded-xl custom-shadow hover:bg-gray-700 transition duration-200 block border-l-4 border-blue-500">
                         <div class="flex justify-between items-center mb-4">
-                            <h3 class="text-xl font-bold text-gray-200">Race To ${match.raceTo}</h3>
-                            <span class="text-sm text-gray-400">${match.id}</span>
+                            <h3 class="text-lg font-bold text-gray-200">Table #${tableNum}</h3>
+                            <span class="text-lg font-bold text-gray-300">Race To ${match.raceTo}</span>
                         </div>
                         <div class="flex justify-between items-center text-center">
                             
