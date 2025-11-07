@@ -58,6 +58,8 @@
             elements.modal = document.getElementById('winner-modal');
             elements.modalText = document.getElementById('winner-modal-text');
             elements.matchIdDisplay = document.getElementById('match-id-display');
+            elements.logToggleBtn = document.getElementById('log-toggle-btn');
+            elements.matchLogContainer = document.getElementById('match-log-container');
         }
 
         // --- 2. FIREBASE INITIALIZATION AND AUTHENTICATION ---
@@ -108,6 +110,7 @@
                 elements.matchSetup.classList.remove('hidden');
                 elements.scorer.classList.add('hidden');
                 elements.modal.classList.add('hidden');
+                elements.logToggleBtn.classList.add('hidden');
                 displayError('');
                 elements.matchIdDisplay.textContent = 'Match ID: None';
                 return;
@@ -116,6 +119,7 @@
             // Hide setup and show scorer
             elements.matchSetup.classList.add('hidden');
             elements.scorer.classList.remove('hidden');
+            elements.logToggleBtn.classList.remove('hidden');
             
             // Update matchState
             Object.assign(matchState, data);
@@ -134,6 +138,16 @@
                 elements.modal.classList.remove('hidden');
             } else {
                 elements.modal.classList.add('hidden');
+            }
+        }
+        
+        function toggleLog() {
+            if (elements.matchLogContainer.classList.contains('hidden')) {
+                elements.matchLogContainer.classList.remove('hidden');
+                elements.logToggleBtn.textContent = 'Hide Match Log';
+            } else {
+                elements.matchLogContainer.classList.add('hidden');
+                elements.logToggleBtn.textContent = 'Show Match Log';
             }
         }
 
@@ -295,11 +309,13 @@
             getElements();
             initFirebase();
             
-            // Attach score update listeners
+            // Attach event listeners
+            document.getElementById('start-match-btn').addEventListener('click', () => updateScore('A', 'win'));
             document.getElementById('win-a-btn').addEventListener('click', () => updateScore('A', 'win'));
             document.getElementById('undo-a-btn').addEventListener('click', () => updateScore('A', 'undo'));
             document.getElementById('win-b-btn').addEventListener('click', () => updateScore('B', 'win'));
             document.getElementById('undo-b-btn').addEventListener('click', () => updateScore('B', 'undo'));
+            document.getElementById('log-toggle-btn').addEventListener('click', toggleLog);
             
              // Check URL for existing match ID (for sharing/rejoining)
             const params = new URLSearchParams(window.location.search);
@@ -325,13 +341,18 @@
 <body class="bg-gray-900 text-gray-100 min-h-screen font-sans flex flex-col items-center p-4">
 
     <!-- Header & Title -->
-    <div class="w-full max-w-lg text-center mb-6">
+    <div class="w-full max-w-4xl text-center mb-6">
         <h1 class="text-4xl font-extrabold text-blue-400 text-shadow">Pool Match</h1>
         <p id="error-message" class="text-red-500 font-semibold mt-2 hidden"></p>
+        
+        <!-- Controls Bar -->
+        <div class="flex justify-between items-center mt-4 px-4 sm:px-0">
+            <p class="text-sm text-gray-500" id="match-id-display">Match ID: None</p>
+            <button id="log-toggle-btn" class="hidden px-3 py-1 bg-gray-700 hover:bg-gray-600 text-sm text-gray-300 rounded-lg transition duration-200">
+                Show Match Log
+            </button>
+        </div>
     </div>
-
-    <!-- Match ID (for debugging/sharing) -->
-    <p class="text-sm text-gray-500 mb-4" id="match-id-display">Match ID: None</p>
 
     <!-- Winner Modal (Hidden by Default) -->
     <div id="winner-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
@@ -362,51 +383,55 @@
     </div>
 
     <!-- Main Scorer Interface (Hidden by Default) -->
-    <div id="scorer" class="hidden w-full max-w-4xl grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div id="scorer" class="hidden w-full max-w-4xl flex flex-col lg:flex-row gap-6">
         
-        <!-- Player A Column -->
-        <div class="col-span-1 bg-gray-800 p-6 rounded-xl custom-shadow flex flex-col items-center border-t-4 border-blue-500">
-            <h2 id="player-name-a" class="text-2xl font-bold text-blue-300 mb-4">Player 1</h2>
-            <div id="score-a" class="text-8xl font-black text-white mb-6 text-shadow">0</div>
+        <!-- Score Columns (Always Visible) -->
+        <div class="flex flex-1 gap-6">
             
-            <!-- Action Buttons for A (2x2 Grid) -->
-            <div class="grid grid-cols-2 gap-3 w-full">
-                <button id="win-a-btn"
-                        class="col-span-2 p-4 bg-green-600 hover:bg-green-700 text-white font-bold text-xl rounded-xl shadow-md transition duration-200 custom-shadow">
-                    Win Rack (+1)
-                </button>
-                <button id="undo-a-btn"
-                        class="col-span-2 p-3 bg-yellow-600 hover:bg-yellow-700 text-gray-900 font-semibold rounded-xl shadow-md transition duration-200 custom-shadow text-sm">
-                    Undo Rack (-1)
-                </button>
+            <!-- Player A Column -->
+            <div class="flex-1 bg-gray-800 p-6 rounded-xl custom-shadow flex flex-col items-center border-t-4 border-blue-500">
+                <h2 id="player-name-a" class="text-2xl font-bold text-blue-300 mb-4">Player 1</h2>
+                <div id="score-a" class="text-8xl font-black text-white mb-6 text-shadow">0</div>
+                
+                <!-- Action Buttons for A -->
+                <div class="grid grid-cols-2 gap-3 w-full">
+                    <button id="win-a-btn"
+                            class="col-span-2 p-4 bg-green-600 hover:bg-green-700 text-white font-bold text-xl rounded-xl shadow-md transition duration-200 custom-shadow">
+                        Win Rack (+1)
+                    </button>
+                    <button id="undo-a-btn"
+                            class="col-span-2 p-3 bg-yellow-600 hover:bg-yellow-700 text-gray-900 font-semibold rounded-xl shadow-md transition duration-200 custom-shadow text-sm">
+                        Undo Rack (-1)
+                    </button>
+                </div>
+            </div>
+
+            <!-- Player B Column -->
+            <div class="flex-1 bg-gray-800 p-6 rounded-xl custom-shadow flex flex-col items-center border-t-4 border-blue-500">
+                <h2 id="player-name-b" class="text-2xl font-bold text-blue-300 mb-4">Player 2</h2>
+                <div id="score-b" class="text-8xl font-black text-white mb-6 text-shadow">0</div>
+                
+                <!-- Action Buttons for B -->
+                <div class="grid grid-cols-2 gap-3 w-full">
+                    <button id="win-b-btn"
+                            class="col-span-2 p-4 bg-green-600 hover:bg-green-700 text-white font-bold text-xl rounded-xl shadow-md transition duration-200 custom-shadow">
+                        Win Rack (+1)
+                    </button>
+                     <button id="undo-b-btn"
+                            class="col-span-2 p-3 bg-yellow-600 hover:bg-yellow-700 text-gray-900 font-semibold rounded-xl shadow-md transition duration-200 custom-shadow text-sm">
+                        Undo Rack (-1)
+                    </button>
+                </div>
             </div>
         </div>
 
-        <!-- Log Column -->
-        <div class="col-span-1 bg-gray-800 p-6 rounded-xl custom-shadow flex flex-col">
+        <!-- Log Column (Collapsible) -->
+        <div id="match-log-container" class="lg:w-1/3 w-full hidden lg:block bg-gray-800 p-6 rounded-xl custom-shadow flex flex-col">
             <h2 class="text-xl font-semibold text-gray-300 mb-4 border-b border-gray-700 pb-2">Match Log (15 Racks)</h2>
-            <div id="match-log" class="space-y-2 overflow-y-auto flex-grow h-64 text-gray-400">
+            <div id="match-log" class="space-y-2 overflow-y-auto flex-grow h-64 lg:h-auto text-gray-400">
                 <!-- Log entries will be inserted here by JavaScript -->
             </div>
             <p class="text-xs text-gray-600 pt-4 border-t border-gray-700 mt-4">Log is read-only.</p>
-        </div>
-
-        <!-- Player B Column -->
-        <div class="col-span-1 bg-gray-800 p-6 rounded-xl custom-shadow flex flex-col items-center border-t-4 border-blue-500">
-            <h2 id="player-name-b" class="text-2xl font-bold text-blue-300 mb-4">Player 2</h2>
-            <div id="score-b" class="text-8xl font-black text-white mb-6 text-shadow">0</div>
-            
-            <!-- Action Buttons for B (2x2 Grid) -->
-            <div class="grid grid-cols-2 gap-3 w-full">
-                <button id="win-b-btn"
-                        class="col-span-2 p-4 bg-green-600 hover:bg-green-700 text-white font-bold text-xl rounded-xl shadow-md transition duration-200 custom-shadow">
-                    Win Rack (+1)
-                </button>
-                 <button id="undo-b-btn"
-                        class="col-span-2 p-3 bg-yellow-600 hover:bg-yellow-700 text-gray-900 font-semibold rounded-xl shadow-md transition duration-200 custom-shadow text-sm">
-                    Undo Rack (-1)
-                </button>
-            </div>
         </div>
     </div>
 </body>
