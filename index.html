@@ -7,25 +7,27 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, query, orderBy, limit, serverTimestamp, runTransaction, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, query, orderBy, limit, serverTimestamp, runTransaction } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Set log level to debug for console visibility
         setLogLevel('Debug');
         
         // --- 1. FIREBASE CONFIGURATION (MANDATORY) ---
-        // This application runs in a hosted environment that provides the Firebase config and auth token.
-        // The __firebase_config variable is the stringified JSON of your provided credentials.
+        // Your specific configuration is hardcoded here for guaranteed deployment success on GitHub Pages.
+        const firebaseConfig = {
+            apiKey: "AIzaSyDecFpmgdHZfYA562wuksV-03VCxOw6PdI",
+            authDomain: "matchscorelive-6bfe9.firebaseapp.com",
+            projectId: "matchscorelive-6bfe9",
+            storageBucket: "matchscorelive-6bfe9.firebasestorage.app",
+            messagingSenderId: "870565113347",
+            appId: "1:870565113347:web:85ca2f2a5b73023b89e836",
+            measurementId: "G-YBNQRZ4NJM"
+        };
         
-        // YOUR FIREBASE CONFIGURATION IS INJECTED HERE:
-        const firebaseConfigString = '{"apiKey":"AIzaSyDecFpmgdHZfYA562wuksV-03VCxOw6PdI","authDomain":"matchscorelive-6bfe9.firebaseapp.com","projectId":"matchscorelive-6bfe9","storageBucket":"matchscorelive-6bfe9.firebasestorage.app","messagingSenderId":"870565113347","appId":"1:870565113347:web:85ca2f2a5b73023b89e836","measurementId":"G-YBNQRZ4NJM"}';
-        
-        const firebaseConfig = JSON.parse(firebaseConfigString);
-        
-        // The app ID and initial auth token are provided by the canvas environment.
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        // Since we are not in the Canvas environment, we must define these manually.
+        const appId = 'matchscorelive-6bfe9'; 
 
         let db, auth, userId = null;
         let isAuthReady = false;
@@ -55,6 +57,7 @@
             elements.errorMessage = document.getElementById('error-message');
             elements.modal = document.getElementById('winner-modal');
             elements.modalText = document.getElementById('winner-modal-text');
+            elements.matchIdDisplay = document.getElementById('match-id-display');
         }
 
         // --- 2. FIREBASE INITIALIZATION AND AUTHENTICATION ---
@@ -65,33 +68,20 @@
                 db = getFirestore(app);
                 auth = getAuth(app);
 
-                // Set up authentication listener
-                onAuthStateChanged(auth, (user) => {
-                    if (user) {
-                        userId = user.uid;
-                        console.log("Authenticated with UID:", userId);
-                    } else {
-                        // This handles the case if initialAuthToken is null or expired
-                        userId = crypto.randomUUID(); // Use a temp ID for anonymous sign-in failure
-                        console.log("Signed in anonymously or using temporary ID:", userId);
-                    }
-                    isAuthReady = true;
-                    // Start listening to data once auth is ready
-                    if (matchState.docId) {
-                        startRealtimeListener(matchState.docId);
-                    }
-                });
-
-                // Sign in using the provided custom token or anonymously
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
+                // Sign in anonymously, as the custom token is unavailable on static hosting
+                const userCredential = await signInAnonymously(auth);
+                userId = userCredential.user.uid;
+                console.log("Authenticated anonymously with UID:", userId);
+                
+                isAuthReady = true; 
+                // Start listening to data once auth is ready
+                if (matchState.docId) {
+                    startRealtimeListener(matchState.docId);
                 }
 
             } catch (error) {
                 console.error("Firebase Initialization or Authentication Failed:", error);
-                displayError(`Error: Firebase Config Missing/Invalid. (Check console for details).`);
+                displayError(`Error: Cannot connect to Firebase database. Check console for details.`);
                 isAuthReady = true; // Mark as ready to avoid endless loading
             }
         }
@@ -99,13 +89,12 @@
         // --- 3. DATA AND UI LOGIC ---
 
         function getMatchDocRef(matchId) {
-            // Using a public artifact path so the match is shared and accessible.
-            // path: /artifacts/{appId}/public/data/matches/{matchId}
+            // Public data path: /artifacts/{appId}/public/data/matches/{matchId}
             return doc(db, 'artifacts', appId, 'public', 'data', 'matches', matchId);
         }
 
         function getLogCollectionRef(matchId) {
-            // path: /artifacts/{appId}/public/data/matches/{matchId}/log
+            // Log path: /artifacts/{appId}/public/data/matches/{matchId}/log
             return collection(db, 'artifacts', appId, 'public', 'data', 'matches', matchId, 'log');
         }
 
@@ -120,6 +109,7 @@
                 elements.scorer.classList.add('hidden');
                 elements.modal.classList.add('hidden');
                 displayError('');
+                elements.matchIdDisplay.textContent = 'Match ID: None';
                 return;
             }
 
@@ -135,6 +125,7 @@
             elements.nameB.textContent = data.players.B;
             elements.scoreA.textContent = data.scores.A;
             elements.scoreB.textContent = data.scores.B;
+            elements.matchIdDisplay.textContent = `Match ID: ${matchState.docId}`;
             
             // Check for game end
             if (data.status === 'Finished') {
@@ -146,13 +137,13 @@
             }
         }
 
-        async function startRealtimeListener(matchId) {
+        function startRealtimeListener(matchId) {
             if (!db || !isAuthReady) return;
 
             const matchRef = getMatchDocRef(matchId);
             
             // 1. Listen to the main match document
-            onSnapshot(matchRef, (docSnap) => {
+            const unsubscribeMatch = onSnapshot(matchRef, (docSnap) => {
                 if (docSnap.exists()) {
                     renderMatch(docSnap.data());
                 } else {
@@ -166,30 +157,34 @@
 
             // 2. Listen to the log
             const logQ = query(getLogCollectionRef(matchId), orderBy('timestamp', 'desc'), limit(15));
-            onSnapshot(logQ, (querySnapshot) => {
+            const unsubscribeLog = onSnapshot(logQ, (querySnapshot) => {
                 let logHtml = '';
                 querySnapshot.forEach((doc) => {
                     const log = doc.data();
+                    const time = log.timestamp ? new Date(log.timestamp.toDate()).toLocaleTimeString() : '...';
                     logHtml += `<p class="text-sm ${log.type === 'win' ? 'text-green-400' : 'text-yellow-400'}">
-                        [${new Date(log.timestamp?.toDate()).toLocaleTimeString() || '...'}] ${log.message}
+                        [${time}] ${log.message}
                     </p>`;
                 });
                 elements.log.innerHTML = logHtml;
             }, (error) => {
                  console.error("Error listening to log:", error);
             });
+            
+            // Note: In a larger app, you'd save and use these unsubscribe functions.
+            return { unsubscribeMatch, unsubscribeLog };
         }
 
         // --- 4. ACTION HANDLERS ---
         
         document.getElementById('start-match-btn').addEventListener('click', async () => {
             if (!db || !isAuthReady) {
-                displayError("Database connection not ready. Check console for errors.");
+                displayError("Database connection not ready. Please wait a moment or check console.");
                 return;
             }
 
-            const nameA = elements.inputNameA.value.trim() || 'Player A';
-            const nameB = elements.inputNameB.value.trim() || 'Player B';
+            const nameA = elements.inputNameA.value.trim() || 'Player 1';
+            const nameB = elements.inputNameB.value.trim() || 'Player 2';
             const raceTo = parseInt(elements.inputRaceTo.value, 10);
             
             if (isNaN(raceTo) || raceTo < 1) {
@@ -199,7 +194,7 @@
 
             displayError(''); // Clear error message
             
-            // Generate a simple match ID. For a complex app, this would be a user-input field.
+            // Generate a simple match ID. 
             const matchId = `match_${crypto.randomUUID().substring(0, 8)}`; 
             const matchRef = getMatchDocRef(matchId);
             
@@ -215,6 +210,12 @@
             try {
                 await setDoc(matchRef, initialData);
                 matchState.docId = matchId; // Set the active document ID
+                
+                // Update URL for sharing
+                const newUrl = new URL(window.location.href);
+                newUrl.searchParams.set('matchId', matchId);
+                window.history.pushState({path: newUrl.href}, '', newUrl.href);
+
                 startRealtimeListener(matchId);
             } catch (error) {
                 console.error("Error creating match:", error);
@@ -223,15 +224,17 @@
         });
 
         document.getElementById('reset-match-btn').addEventListener('click', async () => {
-             // Simple hard refresh to go back to setup and clear state
-             window.location.reload(); 
+             // Clear the matchId from URL and reload to go back to setup
+             const newUrl = new URL(window.location.href);
+             newUrl.searchParams.delete('matchId');
+             window.location.href = newUrl.href; 
         });
 
         async function updateScore(player, type) {
-            if (!db || matchState.status !== 'Active') return;
+            if (!db || matchState.status === 'Setup') return;
             
             const matchRef = getMatchDocRef(matchState.docId);
-            const playerKey = player; // 'A' or 'B'
+            const playerKey = player; 
             const playerName = matchState.players[playerKey];
             const logCollection = getLogCollectionRef(matchState.docId);
             
@@ -245,7 +248,7 @@
                     const currentData = docSnap.data();
                     let currentScore = currentData.scores[playerKey];
                     let newScore, logMessage;
-                    let newStatus = 'Active';
+                    let newStatus = currentData.status;
 
                     if (type === 'win') {
                         newScore = currentScore + 1;
@@ -257,21 +260,12 @@
                         return; // Invalid type
                     }
 
-                    // Check for game completion/reversion
-                    if (newScore >= currentData.raceTo) {
-                        if (newScore > currentData.scores[playerKey]) { // Only if score increased
-                             newStatus = 'Finished';
-                        } else if (newScore < currentData.scores[playerKey]) { // Only if score decreased
-                             // If scores dropped below raceTo, revert status to Active
-                             newStatus = 'Active';
-                        }
-                    } 
-                    
-                    if (type === 'undo' && currentData.status === 'Finished' && newScore < currentData.raceTo) {
-                         // Critical: Undoing a winning score reverts game state
-                         newStatus = 'Active';
-                    } else if (type === 'win' && newScore >= currentData.raceTo) {
+                    // Determine the new status based on score change
+                    if (type === 'win' && newScore >= currentData.raceTo) {
                          newStatus = 'Finished';
+                    } else if (currentData.status === 'Finished' && type === 'undo' && newScore < currentData.raceTo) {
+                         // Undoing a winning score reverts game state
+                         newStatus = 'Active';
                     }
 
                     // Update the match document
@@ -337,7 +331,7 @@
     </div>
 
     <!-- Match ID (for debugging/sharing) -->
-    <p class="text-sm text-gray-500 mb-4" id="match-id-display">Match ID: nineballMatch_A</p>
+    <p class="text-sm text-gray-500 mb-4" id="match-id-display">Match ID: None</p>
 
     <!-- Winner Modal (Hidden by Default) -->
     <div id="winner-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
@@ -372,7 +366,7 @@
         
         <!-- Player A Column -->
         <div class="col-span-1 bg-gray-800 p-6 rounded-xl custom-shadow flex flex-col items-center border-t-4 border-blue-500">
-            <h2 id="player-name-a" class="text-2xl font-bold text-blue-300 mb-4">Player A</h2>
+            <h2 id="player-name-a" class="text-2xl font-bold text-blue-300 mb-4">Player 1</h2>
             <div id="score-a" class="text-8xl font-black text-white mb-6 text-shadow">0</div>
             
             <!-- Action Buttons for A (2x2 Grid) -->
@@ -399,7 +393,7 @@
 
         <!-- Player B Column -->
         <div class="col-span-1 bg-gray-800 p-6 rounded-xl custom-shadow flex flex-col items-center border-t-4 border-blue-500">
-            <h2 id="player-name-b" class="text-2xl font-bold text-blue-300 mb-4">Player B</h2>
+            <h2 id="player-name-b" class="text-2xl font-bold text-blue-300 mb-4">Player 2</h2>
             <div id="score-b" class="text-8xl font-black text-white mb-6 text-shadow">0</div>
             
             <!-- Action Buttons for B (2x2 Grid) -->
